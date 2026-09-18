@@ -1,0 +1,347 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+  COURIER
+  CUSTOMER
+}
+
+enum SupplierType {
+  LOCAL
+  INTERNATIONAL
+}
+
+enum MaterialType {
+  FABRIC
+  PADDING
+  PACKAGING
+  OTHER
+}
+
+enum FabricRollStatus {
+  AVAILABLE
+  IN_USE
+  DEPLETED
+}
+
+enum ProductionStage {
+  RECEIVING
+  CUTTING
+  ASSEMBLY
+  SEWING
+  PACKAGING
+  COMPLETED
+}
+
+enum LeadSource {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  MANUAL
+  OTHER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  ORDERED
+  CLOSED
+}
+
+enum PaymentType {
+  CASH
+  CREDIT
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+enum OrderStatus {
+  PENDING_APPROVAL
+  APPROVED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+enum SmsStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+// ─────────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  email        String?  @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  isWholesale  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders               Order[]            @relation("CustomerOrders")
+  assignedBatches      ProductionBatch[]  @relation("AssignedEmployee")
+  stageLogs            StageLog[]         @relation("StageEmployee")
+  assignedLeads        Lead[]             @relation("AssignedLeads")
+  deliveries           Delivery[]         @relation("CourierDeliveries")
+  debts                Debt[]             @relation("CustomerDebts")
+  verifiedReceipts     Order[]            @relation("ReceiptVerifier")
+  sentSmsLogs          SmsLog[]           @relation("SmsLogs")
+
+  @@map("users")
+}
+
+model Supplier {
+  id          String       @id @default(cuid())
+  name        String
+  type        SupplierType
+  contactName String?
+  phone       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  rawMaterials RawMaterial[]
+
+  @@map("suppliers")
+}
+
+model RawMaterial {
+  id           String       @id @default(cuid())
+  name         String
+  type         MaterialType
+  unit         String
+  currentStock Float        @default(0)
+  minStock     Float        @default(0)
+  supplierId   String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  fabricRolls FabricRoll[]
+
+  @@map("raw_materials")
+}
+
+model FabricRoll {
+  id           String           @id @default(cuid())
+  materialId   String
+  rollNumber   String           @unique
+  totalMeters  Float
+  usedMeters   Float            @default(0)
+  status       FabricRollStatus @default(AVAILABLE)
+  receivedAt   DateTime         @default(now())
+  notes        String?
+
+  material RawMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@map("fabric_rolls")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  category    String
+  images      String[]
+  price       Float
+  b2bPrice    Float
+  stock       Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productionBatches ProductionBatch[]
+  orderItems        OrderItem[]
+
+  @@map("products")
+}
+
+model ProductionBatch {
+  id                 String          @id @default(cuid())
+  productId          String
+  quantity           Int
+  currentStage       ProductionStage @default(RECEIVING)
+  assignedEmployeeId String?
+  notes              String?
+  startedAt          DateTime        @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  assignedEmployee User?      @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  stageLogs        StageLog[]
+
+  @@map("production_batches")
+}
+
+model StageLog {
+  id         String   @id @default(cuid())
+  batchId    String
+  fromStage  String
+  toStage    String
+  employeeId String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  batch    ProductionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  employee User?           @relation("StageEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@map("stage_logs")
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  name           String
+  phone          String
+  email          String?
+  source         LeadSource @default(MANUAL)
+  status         LeadStatus @default(NEW)
+  notes          String?
+  assignedToId   String?
+  webhookPayload Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  assignedTo  User?        @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  webhookLogs WebhookLog[]
+
+  @@map("leads")
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  customerId          String
+  totalAmount         Float
+  deliveryFee         Float         @default(0)
+  paymentType         PaymentType   @default(CASH)
+  paymentStatus       PaymentStatus @default(PENDING)
+  orderStatus         OrderStatus   @default(PENDING_APPROVAL)
+  receiptUrl          String?
+  receiptVerifiedAt   DateTime?
+  receiptVerifiedById String?
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  customer          User        @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  receiptVerifiedBy User?       @relation("ReceiptVerifier", fields: [receiptVerifiedById], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  delivery          Delivery?
+  debt              Debt?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Float
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("order_items")
+}
+
+model Delivery {
+  id              String         @id @default(cuid())
+  orderId         String         @unique
+  courierId       String?
+  deliveryAddress String
+  latitude        Float?
+  longitude       Float?
+  status          DeliveryStatus @default(PENDING)
+  notes           String?
+  scheduledAt     DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courier User? @relation("CourierDeliveries", fields: [courierId], references: [id], onDelete: SetNull)
+
+  @@map("deliveries")
+}
+
+model Debt {
+  id             String    @id @default(cuid())
+  customerId     String
+  orderId        String    @unique
+  totalAmount    Float
+  paidAmount     Float     @default(0)
+  dueDate        DateTime
+  lastReminderAt DateTime?
+  reminderCount  Int       @default(0)
+  isPaid         Boolean   @default(false)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  customer User  @relation("CustomerDebts", fields: [customerId], references: [id], onDelete: Restrict)
+  order    Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("debts")
+}
+
+model SmsLog {
+  id             String    @id @default(cuid())
+  recipientPhone String
+  message        String
+  status         SmsStatus @default(PENDING)
+  eskizMessageId String?
+  sentById       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sentBy User? @relation("SmsLogs", fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@map("sms_logs")
+}
+
+model WebhookLog {
+  id          String    @id @default(cuid())
+  source      String
+  payload     Json
+  processedAt DateTime?
+  leadId      String?
+  createdAt   DateTime  @default(now())
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@map("webhook_logs")
+}
