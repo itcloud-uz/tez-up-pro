@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState, useCallback } from 'react'
 import { Search, Check, X, Loader2, ShoppingBag } from 'lucide-react'
@@ -134,7 +134,29 @@ export default function OrdersPage() {
     setLoading(true)
     fetch('/api/orders')
       .then((r) => r.json())
-      .then((data) => setOrders(Array.isArray(data) ? data : data.orders ?? []))
+      .then((res) => {
+        const rawList = Array.isArray(res) ? res : res.data ?? res.orders ?? []
+        setOrders(
+          rawList.map((o: any) => ({
+            id: o.id,
+            customerName: o.customer?.name ?? 'Noma\'lum mijoz',
+            customerPhone: o.customer?.phone ?? '',
+            total: Number(o.totalAmount ?? o.total ?? 0),
+            status: (o.orderStatus ?? o.status ?? 'PENDING_APPROVAL') as Exclude<OrderStatus, 'ALL'>,
+            paymentMethod: o.paymentType === 'CASH' ? 'Naqd' : 'Qarz (Kredit)',
+            items: Array.isArray(o.items)
+              ? o.items.map((it: any) => ({
+                  name: it.product?.name ?? it.name ?? 'Mahsulot',
+                  quantity: Number(it.quantity ?? 1),
+                  price: Number(it.unitPrice ?? it.price ?? 0),
+                }))
+              : [],
+            deliveryAddress: o.delivery?.deliveryAddress ?? o.deliveryAddress ?? 'Manzil kiritilmagan',
+            createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
+            receiptUrl: o.receiptUrl ?? undefined,
+          }))
+        )
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])

@@ -73,8 +73,34 @@ export default function InventoryPage() {
       fetch('/api/admin/suppliers').then((r) => r.json()),
     ])
       .then(([mats, sups]) => {
-        setMaterials(Array.isArray(mats) ? mats : mats.materials ?? [])
-        setSuppliers(Array.isArray(sups) ? sups : sups.suppliers ?? [])
+        const rawMats = Array.isArray(mats) ? mats : mats.materials ?? []
+        const rawSups = Array.isArray(sups) ? sups : sups.suppliers ?? []
+
+        setMaterials(
+          rawMats.map((m: any) => ({
+            id: m.id,
+            name: m.name ?? '',
+            unit: m.unit ?? 'metr',
+            stock: Number(m.currentStock ?? m.stock ?? 0),
+            minStock: Number(m.minStock ?? 0),
+            pricePerUnit: Number(m.pricePerUnit ?? 0),
+          }))
+        )
+
+        setSuppliers(
+          rawSups.map((s: any) => ({
+            id: s.id,
+            name: s.name ?? '',
+            phone: s.phone ?? '',
+            email: s.email ?? undefined,
+            address: s.address ?? undefined,
+            materials: Array.isArray(s.materials)
+              ? s.materials
+              : Array.isArray(s.rawMaterials)
+              ? s.rawMaterials.map((rm: any) => rm.name)
+              : [],
+          }))
+        )
       })
       .catch(() => {})
       .finally(() => setLoading(false))
