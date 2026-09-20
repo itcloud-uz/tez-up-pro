@@ -2,18 +2,43 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { LeadSource } from '@prisma/client'
 
-export async function POST(req: NextRequest) {
-  // Public endpoint — no auth required
+// 1. Meta / Facebook Webhook Verification (GET so'rovi)
+// Meta dasturchilar panelida webhook URL kiritilganda Meta ushbu GET so'rov orqali verify qiladi
+export async function GET(req: NextRequest) {
   try {
-    const secret = req.headers.get('x-webhook-secret')
+    const { searchParams } = new URL(req.url)
+    const mode = searchParams.get('hub.mode')
+    const token = searchParams.get('hub.verify_token')
+    const challenge = searchParams.get('hub.challenge')
 
-    if (secret !== process.env.WEBHOOK_SECRET) {
-      return Response.json({ error: 'Invalid webhook secret' }, { status: 401 })
+    // DB dagi token yoki env dagi tokenni tekshiramiz
+    const dbTokenSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'META_VERIFY_TOKEN' },
+    })
+
+    const expectedToken = dbTokenSetting?.value || process.env.META_VERIFY_TOKEN || 'tezup_meta_verify_2026'
+
+    if (mode === 'subscribe' && token === expectedToken) {
+      console.log('[META_WEBHOOK_VERIFIED] Challenge sent back successfully')
+      return new Response(challenge, { status: 200 })
     }
 
-    const webhookSource = req.headers.get('x-webhook-source') ?? 'UNKNOWN'
+    // Oddiy test uchun json javob
+    return Response.json({
+      status: 'active',
+      message: 'Tez Up Pro CRM Meta Webhook endpoint is running.',
+    })
+  } catch (error) {
+    console.error('[WEBHOOK_VERIFY_ERROR]', error)
+    return new Response('Verification failed', { status: 403 })
+  }
+}
+
+// 2. Lead Ads va Target so'rovlarini qabul qilish (POST so'rovi)
+export async function POST(req: NextRequest) {
+  try {
     const rawBody = await req.text()
-    let payload: Record<string, unknown> = {}
+    let payload: Record<string, any> = {}
 
     try {
       payload = JSON.parse(rawBody)
@@ -21,82 +46,91 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    // Log raw webhook payload regardless of parsing outcome
-    const webhookLogPromise = prisma.webhookLog.create({
+    // Webhook log yozib borish
+    await prisma.webhookLog.create({
       data: {
-        source: (webhookSource as LeadSource) || 'MANUAL' as LeadSource,
+        source: 'FACEBOOK',
         payload: rawBody,
       },
     })
 
-    // Parse Facebook Lead Ads format
-    // { field_data: [{ name: 'full_name', values: ['John'] }, { name: 'phone_number', values: ['+998...'] }] }
     let name = ''
     let phone = ''
     let email: string | null = null
+    let notes: string | null = null
+    let source: LeadSource = 'FACEBOOK'
 
-    const fieldData = payload.field_data as
-      | Array<{ name: string; values: string[] }>
-      | undefined
-
-    if (Array.isArray(fieldData)) {
-      for (const field of fieldData) {
-        const value = field.values?.[0] ?? ''
-        switch (field.name) {
-          case 'full_name':
-          case 'name':
-            name = value
-            break
-          case 'phone_number':
-          case 'phone':
-            phone = value
-            break
-          case 'email':
-            email = value || null
-            break
+    // Format A: Meta Lead Ads form entry
+    // payload: { entry: [{ changes: [{ value: { form_id, leadgen_id, field_data: [...] } }] }] }
+    if (Array.isArray(payload.entry)) {
+      for (const entry of payload.entry) {
+        if (Array.isArray(entry.changes)) {
+          for (const change of entry.changes) {
+            const val = change.value
+            if (val) {
+              notes = `Form ID: ${val.form_id || '-'}, Leadgen ID: ${val.leadgen_id || '-'}`
+              if (Array.isArray(val.field_data)) {
+                for (const field of val.field_data) {
+                  const v = Array.isArray(field.values) ? field.values[0] : field.values
+                  if (field.name?.includes('name')) name = v
+                  if (field.name?.includes('phone')) phone = v
+                  if (field.name?.includes('email')) email = v
+                }
+              }
+            }
+          }
         }
       }
-    } else {
-      // Generic fallback for flat payloads
-      name =
-        (payload.full_name as string) ??
-        (payload.name as string) ??
-        'Unknown'
-      phone =
-        (payload.phone_number as string) ??
-        (payload.phone as string) ??
-        ''
-      email = (payload.email as string) ?? null
+    }
+
+    // Format B: Oddiy field_data formati
+    if (!phone && Array.isArray(payload.field_data)) {
+      for (const field of payload.field_data) {
+        const value = field.values?.[0] ?? ''
+        if (field.name?.includes('name')) name = value
+        if (field.name?.includes('phone')) phone = value
+        if (field.name?.includes('email')) email = value || null
+      }
+    }
+
+    // Format C: To'g'ridan-to'g'ri JSON ({ name, phone, email, source, notes })
+    if (!phone) {
+      name = payload.full_name || payload.name || 'Yangi Target Mijoz'
+      phone = payload.phone_number || payload.phone || ''
+      email = payload.email || null
+      notes = payload.notes || notes
+      if (payload.source) source = payload.source as LeadSource
     }
 
     if (!phone) {
-      // Still log but don't create lead without phone
-      await webhookLogPromise
-      return Response.json({ received: true, lead: null })
+      return Response.json({ received: true, message: 'No phone number found in payload' })
     }
 
-    // Normalize source to a valid LeadSource enum value, falling back to 'MANUAL'
-    const normalizedSource = webhookSource.toUpperCase() as LeadSource
+    // Telefon raqamni tozalash
+    phone = phone.replace(/[^\d+]/g, '')
+    if (!phone.startsWith('+')) {
+      if (phone.startsWith('998')) phone = '+' + phone
+      else if (phone.length === 9) phone = '+998' + phone
+      else phone = '+' + phone
+    }
 
-    // Create lead and log in parallel
-    const [, lead] = await Promise.all([
-      webhookLogPromise,
-      prisma.lead.create({
-        data: {
-          name: name || 'Unknown',
-          phone,
-          email,
-          source: normalizedSource || ('MANUAL' as LeadSource),
-          status: 'NEW',
-          notes: `Webhook received from ${webhookSource}`,
-        },
-      }),
-    ])
+    // Lead yaratish yoki mavjud bo'lsa yangilash
+    const lead = await prisma.lead.create({
+      data: {
+        name: name || 'Target Xaridor',
+        phone,
+        email,
+        source,
+        status: 'NEW',
+        notes: notes ? `${notes} (Meta Target orqali tushdi)` : 'Meta Target orqali kelib tushdi',
+        webhookPayload: payload,
+      },
+    })
 
-    return Response.json({ received: true, lead: { id: lead.id } })
+    console.log('[CRM_LEAD_CREATED_FROM_TARGET]', lead.id, lead.name, lead.phone)
+    return Response.json({ success: true, leadId: lead.id })
   } catch (error) {
-    console.error('[WEBHOOK_POST]', error)
-    // Always return 200 to social media platforms to prevent retries
-    return Response.json({ received: true })
+    console.error('[WEBHOOK_POST_ERROR]', error)
+    return Response.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

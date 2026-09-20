@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -18,6 +18,7 @@ import {
   User,
   Truck,
   ChevronRight,
+  Settings,
 } from 'lucide-react'
 
 type Role = 'ADMIN' | 'EMPLOYEE' | 'COURIER'
@@ -37,6 +38,7 @@ const NAV_ITEMS: Record<Role, NavItem[]> = {
     { href: '/admin/inventory', label: 'Ombor', icon: Package },
     { href: '/admin/finance', label: 'Moliya', icon: DollarSign },
     { href: '/admin/sms', label: 'SMS', icon: MessageSquare },
+    { href: '/admin/settings', label: 'Sozlamalar', icon: Settings },
   ],
   EMPLOYEE: [
     { href: '/employee', label: 'Vazifalarim', icon: Factory },
