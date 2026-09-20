@@ -56,9 +56,12 @@ export default function SMSPage() {
         }),
       })
 
-      if (!res.ok) throw new Error()
-
       const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'SMS yuborishda xatolik yuz berdi')
+      }
+
       setSuccessMsg(`SMS yuborildi! Jami: ${data.count ?? 1} ta`)
       setMessage('')
       setCustomPhone('')
@@ -67,8 +70,8 @@ export default function SMSPage() {
       const logsRes = await fetch('/api/sms/send')
       const logsData = await logsRes.json()
       setLogs(Array.isArray(logsData) ? logsData : logsData.logs ?? [])
-    } catch {
-      setErrorMsg('SMS yuborishda xatolik yuz berdi')
+    } catch (err: any) {
+      setErrorMsg(err.message || 'SMS yuborishda xatolik yuz berdi')
     } finally {
       setSending(false)
     }
@@ -151,7 +154,19 @@ export default function SMSPage() {
 
         {/* Message */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Xabar matni</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium text-gray-700">Xabar matni</label>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400">Eskiz Test shabloni:</span>
+              <button
+                type="button"
+                onClick={() => setMessage('Bu Eskiz dan test')}
+                className="text-[#FF6B35] hover:underline font-medium"
+              >
+                Bu Eskiz dan test
+              </button>
+            </div>
+          </div>
           <textarea
             className="input-field h-32 py-3 resize-none"
             placeholder="Xabar yozing..."

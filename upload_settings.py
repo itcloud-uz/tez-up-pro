@@ -2,13 +2,15 @@ import paramiko
 import os
 
 files = [
-    ('prisma/schema.prisma', '/home/tezup/tez-up-pro/prisma/schema.prisma'),
-    ('components/layout/AppLayout.tsx', '/home/tezup/tez-up-pro/components/layout/AppLayout.tsx'),
-    ('app/(admin)/admin/settings/page.tsx', '/home/tezup/tez-up-pro/app/(admin)/admin/settings/page.tsx'),
-    ('app/(admin)/admin/crm/page.tsx', '/home/tezup/tez-up-pro/app/(admin)/admin/crm/page.tsx'),
-    ('app/api/admin/settings/route.ts', '/home/tezup/tez-up-pro/app/api/admin/settings/route.ts'),
-    ('app/api/admin/settings/test-eskiz/route.ts', '/home/tezup/tez-up-pro/app/api/admin/settings/test-eskiz/route.ts'),
-    ('app/api/crm/webhook/route.ts', '/home/tezup/tez-up-pro/app/api/crm/webhook/route.ts')
+    ('lib/eskiz.ts', '/home/tezup/tez-up-pro/lib/eskiz.ts'),
+    ('app/api/crm/leads/route.ts', '/home/tezup/tez-up-pro/app/api/crm/leads/route.ts'),
+    ('app/api/crm/leads/[id]/route.ts', '/home/tezup/tez-up-pro/app/api/crm/leads/[id]/route.ts'),
+    ('app/api/sms/send/route.ts', '/home/tezup/tez-up-pro/app/api/sms/send/route.ts'),
+    ('app/api/admin/inventory/materials/route.ts', '/home/tezup/tez-up-pro/app/api/admin/inventory/materials/route.ts'),
+    ('app/api/admin/inventory/materials/[id]/route.ts', '/home/tezup/tez-up-pro/app/api/admin/inventory/materials/[id]/route.ts'),
+    ('app/api/admin/suppliers/route.ts', '/home/tezup/tez-up-pro/app/api/admin/suppliers/route.ts'),
+    ('app/api/production/batches/route.ts', '/home/tezup/tez-up-pro/app/api/production/batches/route.ts'),
+    ('app/(admin)/admin/sms/page.tsx', '/home/tezup/tez-up-pro/app/(admin)/admin/sms/page.tsx'),
 ]
 
 ssh = paramiko.SSHClient()

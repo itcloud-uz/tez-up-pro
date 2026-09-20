@@ -82,9 +82,16 @@ export async function POST(req: NextRequest) {
 
     const result = await eskiz.sendSms(phone, message, session.user.id)
 
+    if (!result.success) {
+      return Response.json(
+        { success: false, error: result.error || 'SMS yuborishda xatolik yuz berdi' },
+        { status: 400 }
+      )
+    }
+
     return Response.json({ success: true, count: 1, result })
   } catch (error: any) {
     console.error('[SMS_SEND_POST]', error)
-    return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 })
+    return Response.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 })
   }
 }

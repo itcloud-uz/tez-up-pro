@@ -233,7 +233,12 @@ export class EskizClient {
       }
 
       if (!response.ok) {
-        throw new Error(`Eskiz API error: ${response.status} ${response.statusText}`)
+        let errDetail = `${response.status} ${response.statusText}`
+        try {
+          const errData = await response.json()
+          if (errData.message) errDetail = errData.message
+        } catch {}
+        throw new Error(`Eskiz: ${errDetail}`)
       }
 
       const data: EskizSendResponse = await response.json()
@@ -323,7 +328,12 @@ export class EskizClient {
       }
 
       if (!response.ok) {
-        throw new Error(`Eskiz sendBatch failed: ${response.status} ${response.statusText}`)
+        let errDetail = `${response.status} ${response.statusText}`
+        try {
+          const errData = await response.json()
+          if (errData.message) errDetail = errData.message
+        } catch {}
+        throw new Error(`Eskiz: ${errDetail}`)
       }
 
       const data = await response.json()
