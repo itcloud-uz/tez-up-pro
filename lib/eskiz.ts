@@ -50,22 +50,32 @@ export class EskizClient {
    * Lazily loads credentials from DB (SystemSetting table) if not passed in env or constructor
    */
   private async getCredentials(): Promise<{ email: string; password: string; senderName: string }> {
-    let email = this.email || process.env.ESKIZ_EMAIL || ''
-    let password = this.password || process.env.ESKIZ_PASSWORD || ''
-    let senderName = this.senderName || process.env.ESKIZ_SENDER || '4546'
+    let email = this.email || ''
+    let password = this.password || ''
+    let senderName = this.senderName || ''
 
-    if (!email || !password) {
-      try {
-        const settings = await prisma.systemSetting.findMany({
-          where: { key: { in: ['ESKIZ_EMAIL', 'ESKIZ_PASSWORD', 'ESKIZ_SENDER'] } },
-        })
-        const map = Object.fromEntries(settings.map((s) => [s.key, s.value]))
-        if (map['ESKIZ_EMAIL']) email = map['ESKIZ_EMAIL']
-        if (map['ESKIZ_PASSWORD']) password = map['ESKIZ_PASSWORD']
-        if (map['ESKIZ_SENDER']) senderName = map['ESKIZ_SENDER']
-      } catch (err) {
-        console.error('[EskizClient] Error loading credentials from DB:', err)
-      }
+    // Always fetch from DB first so user settings take precedence over placeholder .env values
+    try {
+      const settings = await prisma.systemSetting.findMany({
+        where: { key: { in: ['ESKIZ_EMAIL', 'ESKIZ_PASSWORD', 'ESKIZ_SENDER'] } },
+      })
+      const map = Object.fromEntries(settings.map((s) => [s.key, s.value]))
+      if (map['ESKIZ_EMAIL'] && map['ESKIZ_EMAIL'].trim()) email = map['ESKIZ_EMAIL'].trim()
+      if (map['ESKIZ_PASSWORD'] && map['ESKIZ_PASSWORD'].trim()) password = map['ESKIZ_PASSWORD'].trim()
+      if (map['ESKIZ_SENDER'] && map['ESKIZ_SENDER'].trim()) senderName = map['ESKIZ_SENDER'].trim()
+    } catch (err) {
+      console.error('[EskizClient] Error loading credentials from DB:', err)
+    }
+
+    // Fallback to process.env only if DB doesn't have them and env is not a placeholder
+    if (!email && process.env.ESKIZ_EMAIL && !process.env.ESKIZ_EMAIL.includes('test@test')) {
+      email = process.env.ESKIZ_EMAIL
+    }
+    if (!password && process.env.ESKIZ_PASSWORD && !process.env.ESKIZ_PASSWORD.includes('testparol')) {
+      password = process.env.ESKIZ_PASSWORD
+    }
+    if (!senderName) {
+      senderName = process.env.ESKIZ_SENDER || '4546'
     }
 
     if (!email || !password) {
