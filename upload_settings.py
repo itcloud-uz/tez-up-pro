@@ -2,9 +2,9 @@ import paramiko
 import os
 
 files = [
-    ('app/api/production/batches/route.ts', '/home/tezup/tez-up-pro/app/api/production/batches/route.ts'),
-    ('app/api/production/batches/[id]/route.ts', '/home/tezup/tez-up-pro/app/api/production/batches/[id]/route.ts'),
-    ('app/(admin)/admin/production/page.tsx', '/home/tezup/tez-up-pro/app/(admin)/admin/production/page.tsx'),
+    ('app/api/admin/finance/customer-statement/route.ts', '/home/tezup/tez-up-pro/app/api/admin/finance/customer-statement/route.ts'),
+    ('lib/pdfGenerator.ts', '/home/tezup/tez-up-pro/lib/pdfGenerator.ts'),
+    ('app/(admin)/admin/finance/page.tsx', '/home/tezup/tez-up-pro/app/(admin)/admin/finance/page.tsx'),
 ]
 
 ssh = paramiko.SSHClient()

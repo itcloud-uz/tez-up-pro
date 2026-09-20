@@ -17,6 +17,11 @@ import {
   History,
   X,
   Building2,
+  FileText,
+  ChevronRight,
+  CheckCircle2,
+  ShoppingBag,
+  Receipt,
 } from 'lucide-react'
 import { generateCustomerStatementPDF } from '@/lib/pdfGenerator'
 
@@ -48,8 +53,13 @@ interface CustomerBalance {
   isWholesale: boolean
   balance: number
   totalDebt: number
+  totalPurchased?: number
+  totalPaid?: number
   unpaidDebtsCount: number
   ordersCount: number
+  debts?: any[]
+  orders?: any[]
+  transactions?: any[]
 }
 
 interface FinanceStats {
@@ -81,6 +91,11 @@ export default function FinancePage() {
   const [txnType, setTxnType] = useState<'INCOME' | 'EXPENSE'>('INCOME')
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Hisob varaqasi (Customer Statement modal)
+  const [statementCustomer, setStatementCustomer] = useState<CustomerBalance | null>(null)
+  const [statementModalOpen, setStatementModalOpen] = useState(false)
+  const [statementFilter, setStatementFilter] = useState<'all' | 'debts' | 'transactions'>('all')
 
   // Tranzaksiya form
   const [amount, setAmount] = useState('')
@@ -410,54 +425,90 @@ export default function FinancePage() {
                     <p className="font-bold text-gray-900 text-base mt-1">{c.name}</p>
                     <a href={`tel:${c.phone}`} className="text-xs text-[#FF6B35] font-medium">{c.phone}</a>
                   </div>
-                  <button
-                    onClick={() => handleDownloadPDF(c.id)}
-                    disabled={pdfLoadingId === c.id}
-                    className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF6B35] text-xs font-bold flex items-center gap-1.5 transition-colors"
-                  >
-                    {pdfLoadingId === c.id ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-                    Akt-Sverka (PDF)
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setStatementCustomer(c)
+                        setStatementFilter('all')
+                        setStatementModalOpen(true)
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      title="Mijoz hisob varaqasini ko'rish"
+                    >
+                      <FileText size={14} className="text-[#FF6B35]" />
+                      Hisob Varaqasi
+                    </button>
+                    <button
+                      onClick={() => handleDownloadPDF(c.id)}
+                      disabled={pdfLoadingId === c.id}
+                      className="px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF6B35] text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      title="PDF Akt-Sverka yuklash"
+                    >
+                      {pdfLoadingId === c.id ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                      PDF
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-xs">
+                {/* Moliyaviy ko'rsatkichlar - 4 ta box */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-gray-100 text-xs">
                   <div className="bg-gray-50 p-2.5 rounded-lg">
-                    <span className="text-gray-400 block text-[11px]">Balans / Avans</span>
-                    <span className={`font-bold text-sm ${c.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="text-gray-400 block text-[10px]">Balans / Avans</span>
+                    <span className={`font-bold text-xs ${c.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatUZS(c.balance)}
                     </span>
                   </div>
                   <div className="bg-red-50 p-2.5 rounded-lg">
-                    <span className="text-red-500 block text-[11px]">Nasiya Qarzi</span>
-                    <span className="font-bold text-sm text-red-600">{formatUZS(c.totalDebt)}</span>
+                    <span className="text-red-500 block text-[10px]">Nasiya Qarzi</span>
+                    <span className="font-bold text-xs text-red-600">{formatUZS(c.totalDebt)}</span>
+                  </div>
+                  <div className="bg-green-50 p-2.5 rounded-lg">
+                    <span className="text-green-700 block text-[10px]">Jami To'lagan</span>
+                    <span className="font-bold text-xs text-green-700">{formatUZS(c.totalPaid || 0)}</span>
+                  </div>
+                  <div className="bg-blue-50 p-2.5 rounded-lg">
+                    <span className="text-blue-700 block text-[10px]">Jami Xaridlari</span>
+                    <span className="font-bold text-xs text-blue-700">{formatUZS(c.totalPurchased || 0)}</span>
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-1">
+                <div className="flex justify-between items-center gap-2 pt-1">
                   <button
                     onClick={() => {
-                      setSelectedUser(c.id)
-                      setTxnType('INCOME')
-                      setCategory('ORDER_PAYMENT')
-                      setDetails(`${c.name} hisobiga to'lov qabul qilindi`)
-                      setIsTxnModalOpen(true)
+                      setStatementCustomer(c)
+                      setStatementFilter('all')
+                      setStatementModalOpen(true)
                     }}
-                    className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+                    className="text-xs font-bold text-[#FF6B35] hover:underline flex items-center gap-1"
                   >
-                    + To'lov Qabul Qilish
+                    Batafsil hisob varaqasi <ChevronRight size={14} />
                   </button>
-                  <button
-                    onClick={() => {
-                      setSelectedUser(c.id)
-                      setTxnType('EXPENSE')
-                      setCategory('OTHER')
-                      setDetails(`${c.name} hisobidan qaytarish / xarajat`)
-                      setIsTxnModalOpen(true)
-                    }}
-                    className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100"
-                  >
-                    - Chiqim Qilish
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedUser(c.id)
+                        setTxnType('INCOME')
+                        setCategory('ORDER_PAYMENT')
+                        setDetails(`${c.name} hisobiga to'lov qabul qilindi`)
+                        setIsTxnModalOpen(true)
+                      }}
+                      className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100"
+                    >
+                      + To'lov Olish
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedUser(c.id)
+                        setTxnType('EXPENSE')
+                        setCategory('OTHER')
+                        setDetails(`${c.name} hisobidan qaytarish / xarajat`)
+                        setIsTxnModalOpen(true)
+                      }}
+                      className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100"
+                    >
+                      - Chiqim
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -683,6 +734,251 @@ export default function FinancePage() {
                 {submitting ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Kassani Ochish'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MIJOZ HISOB VARAQASI (CUSTOMER STATEMENT) */}
+      {statementModalOpen && statementCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-100 flex items-start justify-between bg-gray-50/50">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statementCustomer.isWholesale ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {statementCustomer.isWholesale ? "Ulgurji Do'kon (B2B)" : "Mijoz"}
+                  </span>
+                  <span className="text-xs text-gray-400">ID: {statementCustomer.id.slice(-6)}</span>
+                </div>
+                <h2 className="text-xl font-black text-gray-900 mt-1 flex items-center gap-2">
+                  <FileText size={20} className="text-[#FF6B35]" />
+                  {statementCustomer.name} — Hisob Varaqasi
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Aloqa: <a href={`tel:${statementCustomer.phone}`} className="text-[#FF6B35] font-semibold">{statementCustomer.phone}</a>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadPDF(statementCustomer.id)}
+                  disabled={pdfLoadingId === statementCustomer.id}
+                  className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF6B35] text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  {pdfLoadingId === statementCustomer.id ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                  PDF Yuklab olish
+                </button>
+                <button
+                  onClick={() => setStatementModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Stats & Detailed statement history */}
+            <div className="p-5 overflow-y-auto space-y-5 flex-1">
+              {/* 4 ta Moliyaviy Box */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                  <span className="text-[11px] text-gray-500 font-medium block">Hozirgi Balans / Avans</span>
+                  <span className={`text-base font-black block mt-0.5 ${statementCustomer.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatUZS(statementCustomer.balance)}
+                  </span>
+                </div>
+
+                <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100">
+                  <span className="text-[11px] text-red-600 font-medium block">Nasiya Qarzi</span>
+                  <span className="text-base font-black text-red-600 block mt-0.5">
+                    {formatUZS(statementCustomer.totalDebt)}
+                  </span>
+                </div>
+
+                <div className="bg-green-50/80 p-3 rounded-2xl border border-green-100">
+                  <span className="text-[11px] text-green-700 font-medium block">Jami To'langan Summa</span>
+                  <span className="text-base font-black text-green-700 block mt-0.5">
+                    {formatUZS(statementCustomer.totalPaid || 0)}
+                  </span>
+                </div>
+
+                <div className="bg-blue-50/80 p-3 rounded-2xl border border-blue-100">
+                  <span className="text-[11px] text-blue-700 font-medium block">Jami Mahsulot Qiymati</span>
+                  <span className="text-base font-black text-blue-700 block mt-0.5">
+                    {formatUZS(statementCustomer.totalPurchased || 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Subtabs for filtering history */}
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStatementFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      statementFilter === 'all'
+                        ? 'bg-[#FF6B35] text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Barcha Harakatlar
+                  </button>
+                  <button
+                    onClick={() => setStatementFilter('debts')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      statementFilter === 'debts'
+                        ? 'bg-[#FF6B35] text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Nasiya & Mahsulotlar ({statementCustomer.debts?.length || 0})
+                  </button>
+                  <button
+                    onClick={() => setStatementFilter('transactions')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      statementFilter === 'transactions'
+                        ? 'bg-[#FF6B35] text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Kassa To'lovlari ({statementCustomer.transactions?.length || 0})
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedUser(statementCustomer.id)
+                      setTxnType('INCOME')
+                      setCategory('DEBT_PAYMENT')
+                      setDetails(`${statementCustomer.name} hisobiga to'lov qabul qilindi`)
+                      setStatementModalOpen(false)
+                      setIsTxnModalOpen(true)
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs hover:bg-green-700 flex items-center gap-1"
+                  >
+                    <Plus size={14} /> To'lov Qabul Qilish
+                  </button>
+                </div>
+              </div>
+
+              {/* JADVAL 1: Nasiyalar va Mahsulot xaridlari */}
+              {(statementFilter === 'all' || statementFilter === 'debts') && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                    <ShoppingBag size={14} className="text-[#FF6B35]" />
+                    Berilgan Mahsulotlar & Nasiyalar Ro'yxati
+                  </h4>
+
+                  {(!statementCustomer.debts || statementCustomer.debts.length === 0) ? (
+                    <p className="text-xs text-gray-400 py-3 text-center bg-gray-50 rounded-xl">
+                      Nasiya xaridlari mavjud emas
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
+                      {statementCustomer.debts.map((d: any) => {
+                        const qoldiq = (d.totalAmount || 0) - (d.paidAmount || 0)
+                        return (
+                          <div key={d.id} className="p-3 bg-white hover:bg-gray-50/60 transition-colors flex items-center justify-between text-xs">
+                            <div className="space-y-1 max-w-[60%]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900">
+                                  {new Date(d.createdAt).toLocaleDateString('uz-UZ')}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${d.isPaid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                  {d.isPaid ? 'To\'langan' : 'Nasiyada'}
+                                </span>
+                              </div>
+                              <p className="text-gray-600 truncate">
+                                {d.order?.items?.length > 0
+                                  ? d.order.items.map((it: any) => `${it.product.name} (${it.quantity} dona/metr)`).join(', ')
+                                  : d.notes || 'Mahsulot nasiyasi'}
+                              </p>
+                            </div>
+
+                            <div className="text-right space-y-0.5">
+                              <p className="font-bold text-gray-900">{formatUZS(d.totalAmount)}</p>
+                              <p className="text-[11px] text-gray-500">
+                                To'langan: <span className="text-green-600 font-semibold">{formatUZS(d.paidAmount || 0)}</span>
+                              </p>
+                              {!d.isPaid && (
+                                <p className="text-[11px] text-red-600 font-bold">
+                                  Qoldiq: {formatUZS(qoldiq)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* JADVAL 2: Kassa to'lovlari (Kirim / Chiqim) */}
+              {(statementFilter === 'all' || statementFilter === 'transactions') && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                    <Receipt size={14} className="text-green-600" />
+                    Mijoz To'lovlari va Kassa Harakatlari Tarixi
+                  </h4>
+
+                  {(!statementCustomer.transactions || statementCustomer.transactions.length === 0) ? (
+                    <p className="text-xs text-gray-400 py-3 text-center bg-gray-50 rounded-xl">
+                      To'lov harakatlari topilmadi
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
+                      {statementCustomer.transactions.map((tx: any) => (
+                        <div key={tx.id} className="p-3 bg-white hover:bg-gray-50/60 transition-colors flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold flex-shrink-0 ${
+                              tx.type === 'INCOME' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {tx.type === 'INCOME' ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-gray-900">
+                                  {tx.type === 'INCOME' ? "To'lov Qabul Qilindi (Kirim)" : "Qaytarildi (Chiqim)"}
+                                </span>
+                                <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-medium">
+                                  {tx.account?.name || 'Kassa'}
+                                </span>
+                              </div>
+                              <p className="text-gray-500 text-[11px] mt-0.5">
+                                {new Date(tx.createdAt).toLocaleString('uz-UZ')} • {tx.details || tx.notes || '-'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right font-black text-sm">
+                            <span className={tx.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}>
+                              {tx.type === 'INCOME' ? '+' : '-'}{formatUZS(tx.amount)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                Jami nasiya qoldig'i: <span className="font-bold text-red-600">{formatUZS(statementCustomer.totalDebt)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatementModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-xs"
+              >
+                Yopish
+              </button>
+            </div>
           </div>
         </div>
       )}

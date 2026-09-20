@@ -11,6 +11,8 @@ export interface CustomerStatementData {
     balance: number
   }
   totalDebt: number
+  totalPurchased?: number
+  totalPaid?: number
   debts: Array<{
     id: string
     totalAmount: number
@@ -85,26 +87,49 @@ export function generateCustomerStatementPDF(data: CustomerStatementData) {
   doc.text(`Telefon: ${data.user.phone || '-' }`, 14, 44)
   doc.text(`Mijoz turi: ${data.user.isWholesale ? 'Ulgurji (B2B)' : 'Chakana (B2C)'}`, 14, 50)
 
-  // Balans va qarz boxlari
+  // 4 ta statistika kartochkalari (2x2 grid)
+  const totalPaid = data.totalPaid ?? data.transactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0)
+  const totalPurchased = data.totalPurchased ?? data.orders.reduce((s, o) => s + o.totalAmount, 0)
+
+  // Qator 1: Balans va Nasiya Qarz
   doc.setFillColor(245, 247, 250)
-  doc.roundedRect(14, 55, 85, 22, 3, 3, 'F')
-  doc.setFontSize(9)
+  doc.roundedRect(14, 55, 88, 20, 2, 2, 'F')
+  doc.setFontSize(8)
   doc.setTextColor(100, 100, 100)
   doc.text('Hozirgi Balans / Avans', 18, 62)
-  doc.setFontSize(13)
+  doc.setFontSize(11)
   doc.setTextColor(data.user.balance >= 0 ? 34 : 220, data.user.balance >= 0 ? 139 : 38, 34)
-  doc.text(`${new Intl.NumberFormat('uz-UZ').format(data.user.balance)} so'm`, 18, 71)
+  doc.text(`${new Intl.NumberFormat('uz-UZ').format(data.user.balance)} so'm`, 18, 70)
 
   doc.setFillColor(254, 242, 242)
-  doc.roundedRect(105, 55, 85, 22, 3, 3, 'F')
-  doc.setFontSize(9)
+  doc.roundedRect(106, 55, 88, 20, 2, 2, 'F')
+  doc.setFontSize(8)
   doc.setTextColor(150, 50, 50)
-  doc.text('Jami Nasiya (Qarz)', 109, 62)
-  doc.setFontSize(13)
+  doc.text('Jami Nasiya (Qarz)', 110, 62)
+  doc.setFontSize(11)
   doc.setTextColor(220, 38, 38)
-  doc.text(`${new Intl.NumberFormat('uz-UZ').format(data.totalDebt)} so'm`, 109, 71)
+  doc.text(`${new Intl.NumberFormat('uz-UZ').format(data.totalDebt)} so'm`, 110, 70)
 
-  let startY = 85
+  // Qator 2: Jami To'langan va Jami Olingan Mahsulotlar
+  doc.setFillColor(240, 253, 244)
+  doc.roundedRect(14, 78, 88, 20, 2, 2, 'F')
+  doc.setFontSize(8)
+  doc.setTextColor(22, 101, 52)
+  doc.text("Jami Qilingan To'lovlar", 18, 85)
+  doc.setFontSize(11)
+  doc.setTextColor(21, 128, 61)
+  doc.text(`${new Intl.NumberFormat('uz-UZ').format(totalPaid)} so'm`, 18, 93)
+
+  doc.setFillColor(239, 246, 255)
+  doc.roundedRect(106, 78, 88, 20, 2, 2, 'F')
+  doc.setFontSize(8)
+  doc.setTextColor(30, 64, 175)
+  doc.text("Jami Olingan Mahsulot Qiymati", 110, 85)
+  doc.setFontSize(11)
+  doc.setTextColor(29, 78, 216)
+  doc.text(`${new Intl.NumberFormat('uz-UZ').format(totalPurchased)} so'm`, 110, 93)
+
+  let startY = 105
 
   // 1-JADVAL: Olingan Mahsulotlar va Nasiyalar
   doc.setFontSize(11)

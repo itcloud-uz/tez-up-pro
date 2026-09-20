@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
         orderBy: { name: 'asc' },
         include: {
           debts: {
-            where: { isPaid: false },
+            orderBy: { createdAt: 'desc' },
             include: {
               order: {
                 include: {
@@ -33,14 +33,12 @@ export async function GET(req: NextRequest) {
             },
           },
           orders: {
-            take: 10,
             orderBy: { createdAt: 'desc' },
             include: {
               items: { include: { product: true } },
             },
           },
           transactions: {
-            take: 10,
             orderBy: { createdAt: 'desc' },
             include: { account: true },
           },
@@ -48,10 +46,20 @@ export async function GET(req: NextRequest) {
       })
 
       const list = users.map((u) => {
-        const totalUnpaidDebt = u.debts.reduce(
-          (sum, d) => sum + (d.totalAmount - (d.paidAmount ?? 0)),
-          0
-        )
+        const totalUnpaidDebt = u.debts
+          .filter((d) => !d.isPaid)
+          .reduce(
+            (sum, d) => sum + (d.totalAmount - (d.paidAmount ?? 0)),
+            0
+          )
+
+        // Jami xaridlar summasi (orders bo'yicha)
+        const totalPurchased = u.orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+
+        // Jami mijoz to'lagan summa (transactions dagi INCOME yoki debts dagi paidAmount)
+        const totalPaidViaTxn = u.transactions
+          .filter((t) => t.type === 'INCOME')
+          .reduce((sum, t) => sum + t.amount, 0)
 
         return {
           id: u.id,
@@ -60,11 +68,13 @@ export async function GET(req: NextRequest) {
           isWholesale: u.isWholesale,
           balance: u.balance, // Musbat = ortiqcha to'lov/avans, Manfiy = umumiy hisob-kitob
           totalDebt: totalUnpaidDebt,
-          unpaidDebtsCount: u.debts.length,
+          totalPurchased,
+          totalPaid: totalPaidViaTxn,
+          unpaidDebtsCount: u.debts.filter((d) => !d.isPaid).length,
           ordersCount: u.orders.length,
-          recentOrders: u.orders,
-          recentDebts: u.debts,
-          recentTransactions: u.transactions,
+          debts: u.debts,
+          orders: u.orders,
+          transactions: u.transactions,
         }
       })
 
@@ -106,6 +116,11 @@ export async function GET(req: NextRequest) {
       .filter((d) => !d.isPaid)
       .reduce((sum, d) => sum + (d.totalAmount - (d.paidAmount ?? 0)), 0)
 
+    const totalPurchased = user.orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+    const totalPaidViaTxn = user.transactions
+      .filter((t) => t.type === 'INCOME')
+      .reduce((sum, t) => sum + t.amount, 0)
+
     return Response.json({
       user: {
         id: user.id,
@@ -116,6 +131,8 @@ export async function GET(req: NextRequest) {
         balance: user.balance,
       },
       totalDebt: totalUnpaidDebt,
+      totalPurchased,
+      totalPaid: totalPaidViaTxn,
       debts: user.debts,
       orders: user.orders,
       transactions: user.transactions,
