@@ -15,6 +15,7 @@ export async function GET(_req: NextRequest) {
       cashOrdersAggregate,
       creditOrdersAggregate,
       unpaidDebts,
+      accounts,
     ] = await Promise.all([
       prisma.order.aggregate({
         _sum: { totalAmount: true },
@@ -36,9 +37,13 @@ export async function GET(_req: NextRequest) {
           order: { select: { id: true, totalAmount: true } },
         },
       }),
+      prisma.cashAccount.findMany({
+        orderBy: { createdAt: 'asc' },
+      }),
     ])
 
     const totalDebt = unpaidDebts.reduce((sum, d) => sum + (d.totalAmount - (d.paidAmount ?? 0)), 0)
+    const totalCashInAccounts = accounts.reduce((sum, a) => sum + (a.balance ?? 0), 0)
 
     const formattedDebts = unpaidDebts.map((d) => ({
       id: d.id,
@@ -57,6 +62,8 @@ export async function GET(_req: NextRequest) {
       totalDebt,
       debtCount: unpaidDebts.length,
       debts: formattedDebts,
+      accounts,
+      totalCashInAccounts,
     })
   } catch (error) {
     console.error('[FINANCE_STATS_GET]', error)

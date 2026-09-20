@@ -94,6 +94,28 @@ enum SmsStatus {
   FAILED
 }
 
+enum CashAccountType {
+  CASH
+  BANK
+  PERSON
+  STORE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionCategory {
+  ORDER_PAYMENT
+  DEBT_PAYMENT
+  ADVANCE_PAYMENT
+  SUPPLIER_PAYMENT
+  SALARY
+  RENT
+  OTHER
+}
+
 // ─────────────────────────────────────────────
 // MODELS
 // ─────────────────────────────────────────────
@@ -106,6 +128,7 @@ model User {
   passwordHash String
   role         Role     @default(CUSTOMER)
   isWholesale  Boolean  @default(false)
+  balance      Float    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -117,6 +140,8 @@ model User {
   debts                Debt[]             @relation("CustomerDebts")
   verifiedReceipts     Order[]            @relation("ReceiptVerifier")
   sentSmsLogs          SmsLog[]           @relation("SmsLogs")
+  cashAccounts         CashAccount[]      @relation("UserCashAccounts")
+  transactions         Transaction[]      @relation("UserTransactions")
 
   @@map("users")
 }
@@ -261,6 +286,7 @@ model Order {
   items             OrderItem[]
   delivery          Delivery?
   debt              Debt?
+  transactions      Transaction[]
 
   @@map("orders")
 }
@@ -344,4 +370,42 @@ model WebhookLog {
   lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@map("webhook_logs")
+}
+
+model CashAccount {
+  id        String          @id @default(cuid())
+  name      String
+  type      CashAccountType @default(CASH)
+  balance   Float           @default(0)
+  userId    String?
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  user         User?         @relation("UserCashAccounts", fields: [userId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@map("cash_accounts")
+}
+
+model Transaction {
+  id            String              @id @default(cuid())
+  type          TransactionType
+  category      TransactionCategory @default(OTHER)
+  amount        Float
+  accountId     String
+  userId        String?
+  orderId       String?
+  paymentMethod PaymentType         @default(CASH)
+  details       String?
+  notes         String?
+  createdById   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  account CashAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  user    User?       @relation("UserTransactions", fields: [userId], references: [id], onDelete: SetNull)
+  order   Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@map("transactions")
 }
