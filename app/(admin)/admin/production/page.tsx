@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Loader2, X, ChevronRight, User } from 'lucide-react'
+import { Plus, Loader2, X, ChevronRight, User, Edit2, Trash2 } from 'lucide-react'
 
 type Stage = 'ALL' | 'RECEIVING' | 'CUTTING' | 'ASSEMBLY' | 'SEWING' | 'PACKAGING' | 'COMPLETED'
 
@@ -10,9 +10,16 @@ interface Batch {
   productName: string
   quantity: number
   stage: Exclude<Stage, 'ALL'>
-  assignedEmployee?: string
+  assignedEmployeeId?: string | null
+  assignedEmployee?: string | null
   createdAt: string
   notes?: string
+}
+
+interface Employee {
+  id: string
+  name: string
+  role: string
 }
 
 const STAGES: Stage[] = ['ALL', 'RECEIVING', 'CUTTING', 'ASSEMBLY', 'SEWING', 'PACKAGING', 'COMPLETED']
@@ -60,31 +67,62 @@ interface NewBatchForm {
   notes: string
 }
 
+interface EditBatchForm {
+  id: string
+  productName: string
+  quantity: string
+  stage: string
+  assignedEmployeeId: string
+  notes: string
+}
+
 export default function ProductionPage() {
   const [batches, setBatches] = useState<Batch[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Stage>('ALL')
   const [modalOpen, setModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [form, setForm] = useState<NewBatchForm>({ productName: '', quantity: '', notes: '' })
+  const [editForm, setEditForm] = useState<EditBatchForm>({
+    id: '',
+    productName: '',
+    quantity: '',
+    stage: 'RECEIVING',
+    assignedEmployeeId: '',
+    notes: '',
+  })
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchBatches = useCallback(() => {
     setLoading(true)
-    fetch('/api/production/batches')
-      .then((r) => r.json())
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data.batches ?? []
+    Promise.all([
+      fetch('/api/production/batches').then((r) => r.json()),
+      fetch('/api/admin/users?role=EMPLOYEE').then((r) => r.json()).catch(() => ({ data: [] })),
+    ])
+      .then(([batchesData, empData]) => {
+        const list = Array.isArray(batchesData) ? batchesData : batchesData.batches ?? []
         setBatches(
           list.map((b: any) => ({
             ...b,
             productName: b.productName ?? b.product?.name ?? 'Noma\'lum mahsulot',
             stage: b.stage ?? b.currentStage ?? 'RECEIVING',
+            assignedEmployeeId: b.assignedEmployeeId ?? b.assignedEmployee?.id ?? null,
             assignedEmployee:
               typeof b.assignedEmployee === 'object' && b.assignedEmployee !== null
                 ? b.assignedEmployee.name
                 : b.assignedEmployee,
           }))
         )
+
+        const emps = Array.isArray(empData)
+          ? empData
+          : Array.isArray(empData?.data)
+          ? empData.data
+          : []
+        setEmployees(emps)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -118,6 +156,53 @@ export default function ProductionPage() {
       fetchBatches()
     } catch {}
     finally { setSubmitting(false) }
+  }
+
+  const handleOpenEdit = (batch: Batch) => {
+    setEditForm({
+      id: batch.id,
+      productName: batch.productName,
+      quantity: batch.quantity.toString(),
+      stage: batch.stage,
+      assignedEmployeeId: batch.assignedEmployeeId || '',
+      notes: batch.notes || '',
+    })
+    setEditModalOpen(true)
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editForm.id || !editForm.productName || !editForm.quantity) return
+    setSubmitting(true)
+    try {
+      await fetch(`/api/production/batches/${editForm.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: editForm.productName,
+          quantity: parseInt(editForm.quantity),
+          stage: editForm.stage,
+          assignedEmployeeId: editForm.assignedEmployeeId || null,
+          notes: editForm.notes,
+        }),
+      })
+      setEditModalOpen(false)
+      fetchBatches()
+    } catch {}
+    finally { setSubmitting(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteConfirmId) return
+    setDeleting(true)
+    try {
+      await fetch(`/api/production/batches/${deleteConfirmId}`, {
+        method: 'DELETE',
+      })
+      setDeleteConfirmId(null)
+      fetchBatches()
+    } catch {}
+    finally { setDeleting(false) }
   }
 
   return (
@@ -181,31 +266,53 @@ export default function ProductionPage() {
                   <h3 className="font-bold text-gray-900 text-base truncate">{batch.productName}</h3>
                   <p className="text-sm text-gray-500">{batch.quantity} dona</p>
                 </div>
-                <span className={`badge text-xs flex-shrink-0 ${STAGE_COLORS[batch.stage] || 'bg-gray-100 text-gray-700'}`}>
-                  {STAGE_LABELS[batch.stage as Stage] || batch.stage}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`badge text-xs flex-shrink-0 ${STAGE_COLORS[batch.stage] || 'bg-gray-100 text-gray-700'}`}>
+                    {STAGE_LABELS[batch.stage as Stage] || batch.stage}
+                  </span>
+                  {/* Edit & Delete Action Buttons */}
+                  <div className="flex items-center gap-1 border-l border-gray-200 pl-2">
+                    <button
+                      onClick={() => handleOpenEdit(batch)}
+                      title="Tahrirlash"
+                      className="p-1.5 text-gray-500 hover:text-[#FF6B35] hover:bg-orange-50 rounded-lg transition-colors"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(batch.id)}
+                      title="O'chirish"
+                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <StageProgressBar stage={batch.stage} />
 
               <div className="flex items-center justify-between">
                 {batch.assignedEmployee ? (
-                  <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                    <User size={14} />
-                    <span>{batch.assignedEmployee}</span>
+                  <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                    <User size={14} className="text-[#FF6B35]" />
+                    <span className="font-medium">{batch.assignedEmployee}</span>
                   </div>
                 ) : (
                   <span className="text-xs text-gray-400">Tayinlanmagan</span>
                 )}
                 <div className="flex items-center gap-2">
-                  <button className="text-xs text-[#FF6B35] font-medium flex items-center gap-1 hover:underline">
-                    Batafsil <ChevronRight size={14} />
+                  <button
+                    onClick={() => handleOpenEdit(batch)}
+                    className="text-xs text-[#FF6B35] font-medium flex items-center gap-1 hover:underline"
+                  >
+                    Batafsil / Tahrirlash <ChevronRight size={14} />
                   </button>
                 </div>
               </div>
 
               {batch.notes && (
-                <p className="text-xs text-gray-400 italic">{batch.notes}</p>
+                <p className="text-xs text-gray-400 italic bg-gray-50 p-2 rounded-lg">{batch.notes}</p>
               )}
             </div>
           ))}
@@ -232,7 +339,7 @@ export default function ProductionPage() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Mahsulot nomi
+                  Mahsulot nomi *
                 </label>
                 <input
                   type="text"
@@ -245,7 +352,7 @@ export default function ProductionPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Miqdor (dona)
+                  Miqdor (dona) *
                 </label>
                 <input
                   type="number"
@@ -277,6 +384,158 @@ export default function ProductionPage() {
                 Yaratish
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setEditModalOpen(false)}
+          />
+          <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-6 z-10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">Partiyani tahrirlash</h2>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Mahsulot nomi *
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editForm.productName}
+                  onChange={(e) => setEditForm({ ...editForm, productName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Miqdor (dona) *
+                  </label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    min="1"
+                    value={editForm.quantity}
+                    onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Bosqich
+                  </label>
+                  <select
+                    className="input-field"
+                    value={editForm.stage}
+                    onChange={(e) => setEditForm({ ...editForm, stage: e.target.value })}
+                  >
+                    {STAGE_ORDER.map((s) => (
+                      <option key={s} value={s}>
+                        {STAGE_LABELS[s as Stage]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Mas'ul xodim (usta)
+                </label>
+                <select
+                  className="input-field"
+                  value={editForm.assignedEmployeeId}
+                  onChange={(e) => setEditForm({ ...editForm, assignedEmployeeId: e.target.value })}
+                >
+                  <option value="">Tayinlanmagan</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Izoh
+                </label>
+                <textarea
+                  className="input-field h-20 py-3 resize-none"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 btn-primary flex items-center justify-center gap-2"
+                >
+                  {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                  Saqlash
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setDeleteConfirmId(null)}
+          />
+          <div className="relative bg-white w-full max-w-sm rounded-2xl p-6 z-10 space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Partiyani o'chirish</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Ushbu ishlab chiqarish partiyasini va uning barcha bosqich qaydlarini o'chirishga ishonchingiz komilmi?
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 flex items-center justify-center gap-2"
+              >
+                {deleting ? <Loader2 size={16} className="animate-spin" /> : null}
+                O'chirish
+              </button>
+            </div>
           </div>
         </div>
       )}

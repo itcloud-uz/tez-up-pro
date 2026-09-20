@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       currentStage: b.currentStage,
       stage: b.currentStage,
       notes: b.notes,
+      assignedEmployeeId: b.assignedEmployeeId,
       assignedEmployee: b.assignedEmployee?.name ?? null,
       startedAt: b.startedAt,
       completedAt: b.completedAt,
