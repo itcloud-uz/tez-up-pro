@@ -59,14 +59,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Map source safely to valid enum
+    const validSources: Record<string, LeadSource> = {
+      FACEBOOK: 'FACEBOOK',
+      INSTAGRAM: 'INSTAGRAM',
+      TIKTOK: 'TIKTOK',
+      MANUAL: 'MANUAL',
+      OTHER: 'OTHER',
+    }
+    const cleanSource = source ? String(source).toUpperCase().trim() : 'MANUAL'
+    const leadSource: LeadSource = validSources[cleanSource] || 'MANUAL'
+
     const lead = await prisma.lead.create({
       data: {
-        name,
-        phone,
-        email: email ?? null,
-        source: source as LeadSource ?? 'MANUAL',
-        notes: notes ?? null,
-        status: 'NEW',
+        name: String(name).trim(),
+        phone: String(phone).trim(),
+        email: email ? String(email).trim() : null,
+        source: leadSource,
+        notes: notes ? String(notes).trim() : null,
+        status: (body.status === 'CONTACTED' || body.status === 'ORDERED' || body.status === 'CLOSED') ? body.status : 'NEW',
       },
     })
 

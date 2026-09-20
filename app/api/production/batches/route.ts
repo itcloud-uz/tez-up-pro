@@ -68,23 +68,47 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { productId, quantity, notes } = body
+    const { productId, productName, quantity, notes } = body
 
-    if (!productId || !quantity) {
+    if ((!productId && !productName) || !quantity) {
       return Response.json(
-        { error: 'productId and quantity are required' },
+        { error: 'Mahsulot va miqdori kiritilishi shart' },
         { status: 400 }
       )
     }
 
-    const product = await prisma.product.findUnique({ where: { id: productId } })
+    let targetProductId = productId
+    if (!targetProductId && productName) {
+      // Find existing product or create one
+      let product = await prisma.product.findFirst({
+        where: { name: { equals: productName.trim(), mode: 'insensitive' } },
+      })
+
+      if (!product) {
+        const slug = productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now()
+        product = await prisma.product.create({
+          data: {
+            name: productName.trim(),
+            slug,
+            category: 'Umumiy',
+            price: 0,
+            b2bPrice: 0,
+            stock: 0,
+            images: [],
+          },
+        })
+      }
+      targetProductId = product.id
+    }
+
+    const product = await prisma.product.findUnique({ where: { id: targetProductId } })
     if (!product) {
       return Response.json({ error: 'Product not found' }, { status: 404 })
     }
 
     const batch = await prisma.productionBatch.create({
       data: {
-        productId,
+        productId: targetProductId,
         quantity: Number(quantity),
         notes: notes ?? null,
         currentStage: 'RECEIVING',

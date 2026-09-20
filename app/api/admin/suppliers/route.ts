@@ -39,11 +39,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, type, contactName, phone, address, notes } = body
+    const { name, contactName, phone, address, notes } = body
+    const type = body.type || 'LOCAL'
 
-    if (!name || !type) {
+    if (!name) {
       return Response.json(
-        { error: 'name and type are required' },
+        { error: 'name is required' },
         { status: 400 }
       )
     }

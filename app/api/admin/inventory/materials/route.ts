@@ -43,11 +43,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, type, unit, currentStock, minStock, supplierId } = body
+    const { name, unit, supplierId } = body
+    const type = body.type || 'FABRIC'
+    const currentStock = Number(body.currentStock ?? body.stock ?? 0)
+    const minStock = Number(body.minStock ?? 0)
 
-    if (!name || !type || !unit) {
+    if (!name || !unit) {
       return Response.json(
-        { error: 'name, type, and unit are required' },
+        { error: 'name and unit are required' },
         { status: 400 }
       )
     }
@@ -57,8 +60,8 @@ export async function POST(req: NextRequest) {
         name,
         type,
         unit,
-        currentStock: currentStock ?? 0,
-        minStock: minStock ?? 0,
+        currentStock,
+        minStock,
         supplierId: supplierId ?? null,
       },
       include: {

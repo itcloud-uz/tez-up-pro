@@ -52,7 +52,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await req.json()
-    const { name, type, unit, currentStock, minStock, supplierId, stockAdjustment } = body
+    const { name, type, unit, currentStock, stock, minStock, supplierId, stockAdjustment } = body
 
     const existing = await prisma.rawMaterial.findUnique({ where: { id } })
     if (!existing) {
@@ -65,6 +65,8 @@ export async function PUT(
       newStock = existing.currentStock + Number(stockAdjustment)
     } else if (currentStock !== undefined) {
       newStock = Number(currentStock)
+    } else if (stock !== undefined) {
+      newStock = Number(stock)
     }
 
     const updated = await prisma.rawMaterial.update({

@@ -34,16 +34,45 @@ interface EskizBulkItem {
 }
 
 export class EskizClient {
-  private email: string
-  private password: string
-  private senderName: string
+  private email: string | null = null
+  private password: string | null = null
+  private senderName: string | null = null
   private token: string | null = null
   private tokenExpiresAt: Date | null = null
 
-  constructor(email: string, password: string, senderName: string) {
-    this.email = email
-    this.password = password
-    this.senderName = senderName
+  constructor(email?: string, password?: string, senderName?: string) {
+    this.email = email || null
+    this.password = password || null
+    this.senderName = senderName || null
+  }
+
+  /**
+   * Lazily loads credentials from DB (SystemSetting table) if not passed in env or constructor
+   */
+  private async getCredentials(): Promise<{ email: string; password: string; senderName: string }> {
+    let email = this.email || process.env.ESKIZ_EMAIL || ''
+    let password = this.password || process.env.ESKIZ_PASSWORD || ''
+    let senderName = this.senderName || process.env.ESKIZ_SENDER || '4546'
+
+    if (!email || !password) {
+      try {
+        const settings = await prisma.systemSetting.findMany({
+          where: { key: { in: ['ESKIZ_EMAIL', 'ESKIZ_PASSWORD', 'ESKIZ_SENDER'] } },
+        })
+        const map = Object.fromEntries(settings.map((s) => [s.key, s.value]))
+        if (map['ESKIZ_EMAIL']) email = map['ESKIZ_EMAIL']
+        if (map['ESKIZ_PASSWORD']) password = map['ESKIZ_PASSWORD']
+        if (map['ESKIZ_SENDER']) senderName = map['ESKIZ_SENDER']
+      } catch (err) {
+        console.error('[EskizClient] Error loading credentials from DB:', err)
+      }
+    }
+
+    if (!email || !password) {
+      throw new Error('Eskiz email yoki parol sozlanmagan. Tizim sozlamalaridan kiriting.')
+    }
+
+    return { email, password, senderName }
   }
 
   // ──────────────────────────────────────────────
@@ -81,9 +110,11 @@ export class EskizClient {
 
   /** Full login — fetches a new token using email/password. */
   private async login(): Promise<string> {
+    const creds = await this.getCredentials()
+
     const formData = new FormData()
-    formData.append('email', this.email)
-    formData.append('password', this.password)
+    formData.append('email', creds.email)
+    formData.append('password', creds.password)
 
     const response = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
@@ -174,12 +205,13 @@ export class EskizClient {
     })
 
     try {
+      const creds = await this.getCredentials()
       const token = await this.getToken()
 
       const formData = new FormData()
       formData.append('mobile_phone', normalized)
       formData.append('message', message)
-      formData.append('from', this.senderName)
+      formData.append('from', creds.senderName)
       // Optional: callback URL for delivery receipts
       if (process.env.ESKIZ_CALLBACK_URL) {
         formData.append('callback_url', process.env.ESKIZ_CALLBACK_URL)
@@ -262,6 +294,7 @@ export class EskizClient {
     )
 
     try {
+      const creds = await this.getCredentials()
       const token = await this.getToken()
 
       // Eskiz bulk format: array of { user_sms_id, to, text }
@@ -279,24 +312,24 @@ export class EskizClient {
         },
         body: JSON.stringify({
           messages: payload,
-          from: this.senderName,
+          from: creds.senderName,
         }),
       })
 
       if (response.status === 401) {
         this.token = null
         this.tokenExpiresAt = null
-        throw new Error('Eskiz token expired')
+        throw new Error('Eskiz token expired — will retry on next call')
       }
 
       if (!response.ok) {
-        throw new Error(`Eskiz bulk API error: ${response.status} ${response.statusText}`)
+        throw new Error(`Eskiz sendBatch failed: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
-      const results: any[] = data?.result ?? data?.data ?? []
+      const results = Array.isArray(data.data) ? data.data : []
 
-      // Update all log entries to SENT
+      // Mark each log as SENT with its respective Eskiz message ID
       await Promise.all(
         logIds.map((l, i) =>
           prisma.smsLog.update({
@@ -333,15 +366,4 @@ export class EskizClient {
 // Singleton export
 // ──────────────────────────────────────────────
 
-/**
- * Singleton Eskiz client.
- * Credentials are read from environment variables:
- *   ESKIZ_EMAIL    — your Eskiz account email
- *   ESKIZ_PASSWORD — your Eskiz account password
- *   ESKIZ_SENDER   — your approved sender name (e.g. "4546")
- */
-export const eskiz = new EskizClient(
-  process.env.ESKIZ_EMAIL!,
-  process.env.ESKIZ_PASSWORD!,
-  process.env.ESKIZ_SENDER ?? '4546',
-)
+export const eskiz = new EskizClient()
